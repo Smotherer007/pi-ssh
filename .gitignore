@@ -1,0 +1,7 @@
+node_modules/
+coverage/
+*.pdf
+*.jpg
+*.png
+!screenshot.png
+.DS_Store

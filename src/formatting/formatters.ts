@@ -1,0 +1,133 @@
+/**
+ * Output formatters.
+ *
+ * Pure functions that transform domain data into display strings.
+ * No emojis, no side effects.
+ */
+
+import type {
+  AuthorizeResult,
+  ExecResult,
+  RemoteEntry,
+  ServerIdentity,
+  SshProfile,
+  TransferResult,
+} from "../types.ts";
+
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "unknown size";
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
+}
+
+/** How a profile authenticates, without revealing any secret. */
+export function describeAuth(profile: SshProfile): string {
+  const methods: string[] = [];
+  if (profile.privateKeyPath) methods.push(`key ${profile.privateKeyPath}`);
+  if (profile.password) methods.push("password (stored)");
+  return methods.length > 0 ? methods.join(", ") : "none configured";
+}
+
+export function formatProfileStatus(
+  profiles: Record<string, SshProfile>,
+  active: string | null,
+): string {
+  const names = Object.keys(profiles);
+  if (names.length === 0) {
+    return "No SSH hosts configured. Use ssh_setup with a host, user, and a password or key path.";
+  }
+
+  const lines: string[] = [];
+  for (const name of names) {
+    const profile = profiles[name];
+    const marker = name === active ? "*" : " ";
+    const port = profile.port === 22 ? "" : `:${profile.port}`;
+    lines.push(`${marker} ${name}: ${profile.user}@${profile.host}${port}`);
+    lines.push(`    auth: ${describeAuth(profile)}`);
+    if (profile.strictHostKey === false) {
+      lines.push("    host key checking is OFF for this profile");
+    }
+  }
+
+  return [`SSH hosts (${names.length}), * marks the active one:`, ...lines].join("\n");
+}
+
+export function formatIdentity(identity: ServerIdentity): string {
+  return [
+    `Connected: ${identity.user}@${identity.host}:${identity.port}`,
+    `Authenticated with: ${identity.authMethod}`,
+    `Host key: ${identity.keyType} ${identity.fingerprint} (${identity.hostKeyVerdict})`,
+  ].join("\n");
+}
+
+export function formatExecResult(result: ExecResult): string {
+  const sections: string[] = [];
+  const status =
+    result.code === 0
+      ? "exit 0"
+      : result.signal
+        ? `killed by ${result.signal}`
+        : `exit ${result.code}`;
+
+  sections.push(`$ ${result.command}`);
+  sections.push(`[${status}, ${result.durationMs} ms]`);
+
+  if (result.stdout.trim()) {
+    sections.push("", result.stdout.replace(/\s+$/, ""));
+  }
+  if (result.stderr.trim()) {
+    sections.push("", "stderr:", result.stderr.replace(/\s+$/, ""));
+  }
+  if (!result.stdout.trim() && !result.stderr.trim()) {
+    sections.push("", "(no output)");
+  }
+  return sections.join("\n");
+}
+
+export function formatDirectory(
+  entries: ReadonlyArray<RemoteEntry>,
+  remotePath: string,
+): string {
+  if (entries.length === 0) {
+    return `${remotePath} is empty.`;
+  }
+
+  const lines = entries.map((entry) => {
+    const suffix = entry.type === "directory" ? "/" : entry.type === "symlink" ? "@" : "";
+    const size = entry.type === "directory" ? "" : ` ${formatBytes(entry.size)}`;
+    const date = entry.modified ? ` ${entry.modified.slice(0, 10)}` : "";
+    return `${entry.mode}${date}${size}  ${entry.name}${suffix}`;
+  });
+
+  return [`${remotePath} (${entries.length} entries):`, ...lines].join("\n");
+}
+
+export function formatTransfer(result: TransferResult, direction: "up" | "down"): string {
+  return direction === "up"
+    ? `Uploaded ${result.localPath} to ${result.remotePath} (${formatBytes(result.size)}).`
+    : `Downloaded ${result.remotePath} to ${result.localPath} (${formatBytes(result.size)}).`;
+}
+
+export function formatAuthorizeResult(result: AuthorizeResult): string {
+  const lines = [
+    result.installed
+      ? `Key installed on the remote host and recorded in profile "${result.profile}".`
+      : `The key was already in ${result.authorizedKeysPath}; profile "${result.profile}" now uses it.`,
+    "",
+    `Private key: ${result.keyPath}`,
+    `Public key:  ${result.publicKeyPath}`,
+    `Fingerprint: ${result.fingerprint}`,
+    "",
+    result.verified
+      ? "Verified: a fresh connection authenticated with the key alone, so no password is needed from now on."
+      : "Warning: the key was installed but a key-only login could not be verified. The password is still in the profile as a fallback.",
+  ];
+  return lines.join("\n");
+}

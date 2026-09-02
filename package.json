@@ -1,0 +1,52 @@
+{
+  "name": "@patimweb/pi-ssh",
+  "version": "1.0.0",
+  "description": "SSH client extension for the pi coding agent. Run commands, transfer files over SFTP, and set up key-based login on remote hosts.",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "ssh",
+    "sftp",
+    "remote",
+    "ssh2"
+  ],
+  "author": "Patrick Weppelmann",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Smotherer007/pi-ssh.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Smotherer007/pi-ssh/issues"
+  },
+  "scripts": {
+    "build": "echo 'No build step defined'",
+    "test": "node --experimental-test-module-mocks --experimental-test-coverage --test 'tests/**/*.test.ts'",
+    "test:watch": "node --experimental-test-module-mocks --test --watch 'tests/**/*.test.ts'",
+    "test:coverage": "node --experimental-test-module-mocks --experimental-test-coverage --test 'tests/**/*.test.ts'"
+  },
+  "dependencies": {
+    "ssh2": "^1.17.0",
+    "typebox": "^1.2.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@semantic-release/git": "^10.0.0",
+    "@types/ssh2": "^1.15.0",
+    "semantic-release": "^25.0.0"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  }
+}
