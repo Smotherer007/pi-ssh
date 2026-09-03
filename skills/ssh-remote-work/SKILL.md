@@ -1,6 +1,6 @@
 ---
 name: ssh-remote-work
-description: Work on a remote machine over SSH - run commands, inspect logs and configuration, and move files with SFTP. Use whenever the task is on another host: deploying or restarting a service, reading logs on a server, checking disk or process state, copying a build artefact to or from a machine, or anything the user describes as "on the server", "on the NAS", "on staging", or by a hostname. Also covers what to do when a connection fails and how to read a host key warning.
+description: Work on a remote machine over SSH - run commands, inspect logs and configuration, and move files with SFTP. Use whenever the task belongs on another host, for example deploying or restarting a service, reading logs on a server, checking disk or process state, copying a build artefact to or from a machine, or anything the user describes as "on the server", "on the NAS", "on staging", or by a hostname. Also covers what to do when a connection fails and how to read a host key warning.
 allowed-tools: ssh_status, ssh_profile, ssh_exec, ssh_list, ssh_upload, ssh_download, ssh_doctor
 ---
 

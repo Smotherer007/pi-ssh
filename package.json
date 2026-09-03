@@ -39,7 +39,8 @@
   "devDependencies": {
     "@semantic-release/git": "^10.0.0",
     "@types/ssh2": "^1.15.0",
-    "semantic-release": "^25.0.0"
+    "semantic-release": "^25.0.0",
+    "yaml": "^2.9.0"
   },
   "pi": {
     "extensions": [

@@ -94,9 +94,15 @@ describe("Extension entry point", () => {
 });
 
 describe("Skills", () => {
-  it("ships a SKILL.md with valid frontmatter for every skill", async () => {
+  it("ships a SKILL.md whose frontmatter is valid YAML", async () => {
+    // Parsing it for real rather than pulling fields out with a regular
+    // expression: pi loads these with a YAML parser, and an unquoted value
+    // containing ": " is read as a nested mapping and rejected. A regex is
+    // happy with that, which is exactly how a broken skill shipped once.
     const fs = await import("node:fs");
     const path = await import("node:path");
+    const { parse } = await import("yaml");
+
     const skillsDir = path.join(import.meta.dirname, "..", "skills");
     const names = fs
       .readdirSync(skillsDir, { withFileTypes: true })
@@ -112,14 +118,45 @@ describe("Skills", () => {
       const content = fs.readFileSync(file, "utf-8");
       assert.ok(content.startsWith("---\n"), `${name} has no frontmatter`);
 
-      const frontmatter = content.slice(4, content.indexOf("\n---", 4));
-      const declaredName = /^name:\s*(.+)$/m.exec(frontmatter)?.[1]?.trim();
-      const description = /^description:\s*(.+)$/m.exec(frontmatter)?.[1]?.trim();
+      const end = content.indexOf("\n---", 4);
+      assert.ok(end > 0, `${name}: the frontmatter is not closed`);
 
-      assert.strictEqual(declaredName, name, `${name}: frontmatter name mismatch`);
-      assert.match(declaredName!, /^[a-z0-9-]{1,64}$/);
-      assert.ok(description && description.length <= 1024);
+      let frontmatter: Record<string, unknown>;
+      try {
+        frontmatter = parse(content.slice(4, end)) as Record<string, unknown>;
+      } catch (err) {
+        assert.fail(`${name}: the frontmatter is not valid YAML -- ${(err as Error).message}`);
+      }
+
+      assert.strictEqual(frontmatter.name, name, `${name}: frontmatter name mismatch`);
+      assert.match(String(frontmatter.name), /^[a-z0-9-]{1,64}$/);
+
+      const description = frontmatter.description;
+      assert.strictEqual(typeof description, "string", `${name}: description must be a string`);
+      assert.ok(String(description).length > 0 && String(description).length <= 1024);
+
+      if (frontmatter["allowed-tools"] !== undefined) {
+        assert.strictEqual(
+          typeof frontmatter["allowed-tools"],
+          "string",
+          `${name}: allowed-tools should parse as one string`,
+        );
+      }
     }
+  });
+
+  it("catches the mistake that broke a skill once", async () => {
+    const { parse } = await import("yaml");
+    // An unquoted value with a colon and a space is a nested mapping to YAML.
+    assert.throws(
+      () => parse("description: Use it on another host: deploy things\n"),
+      /mapping/i,
+    );
+    // Quoted, or without the colon, it is a plain string again.
+    assert.strictEqual(
+      parse("description: Use it on another host, deploying things\n").description,
+      "Use it on another host, deploying things",
+    );
   });
 });
 
