@@ -14,6 +14,7 @@ import { SshDownloadTool } from "../src/tools/ssh-download.ts";
 import { SshKeygenTool } from "../src/tools/ssh-keygen.ts";
 import { SshAuthorizeTool } from "../src/tools/ssh-authorize.ts";
 import { SshDoctorTool } from "../src/tools/ssh-doctor.ts";
+import { SshTunnelTool } from "../src/tools/ssh-tunnel.ts";
 
 const allTools = [
   SshSetupTool,
@@ -26,11 +27,12 @@ const allTools = [
   SshKeygenTool,
   SshAuthorizeTool,
   SshDoctorTool,
+  SshTunnelTool,
 ];
 
 describe("Tool structure smoke test", () => {
-  it("has exactly 10 tools", () => {
-    assert.strictEqual(allTools.length, 10);
+  it("has exactly 11 tools", () => {
+    assert.strictEqual(allTools.length, 11);
   });
 
   for (const tool of allTools) {
@@ -70,11 +72,24 @@ describe("Extension entry point", () => {
     mod.default({
       registerTool: (tool: { name: string }) => registered.push(tool.name),
       registerCommand: (name: string) => commands.push(name),
+      on: () => {},
       sendUserMessage: () => {},
     } as any);
 
     assert.deepStrictEqual(registered.sort(), allTools.map((t) => t.name).sort());
     assert.deepStrictEqual(commands.sort(), ["ssh", "ssh-key"]);
+  });
+
+  it("closes tunnels when the session ends, so nothing outlives pi", async () => {
+    const events: string[] = [];
+    const mod = await import("../index.ts");
+    mod.default({
+      registerTool: () => {},
+      registerCommand: () => {},
+      on: (event: string) => events.push(event),
+      sendUserMessage: () => {},
+    } as any);
+    assert.ok(events.includes("session_shutdown"));
   });
 });
 

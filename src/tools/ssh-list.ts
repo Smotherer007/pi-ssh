@@ -3,7 +3,7 @@
  */
 
 import { Type } from "typebox";
-import { resolveProfile } from "../config.ts";
+import { resolveForConnection, withNote } from "./shared.ts";
 import { listDirectory, withConnection } from "../clients/ssh-client.ts";
 import { formatDirectory } from "../formatting/formatters.ts";
 
@@ -27,7 +27,10 @@ export const SshListTool = {
     params: { path: string; profile?: string; acceptNewHostKey?: boolean },
     signal: AbortSignal,
   ) {
-    const { name, profile } = resolveProfile(params.profile);
+    const { name, profile, note } = await resolveForConnection(params.profile, {
+      acceptNewHostKey: params.acceptNewHostKey,
+      signal,
+    });
     const remotePath = params.path?.trim() || ".";
 
     const entries = await withConnection(
@@ -37,7 +40,9 @@ export const SshListTool = {
     );
 
     return {
-      content: [{ type: "text" as const, text: formatDirectory(entries, remotePath) }],
+      content: [
+        { type: "text" as const, text: withNote(formatDirectory(entries, remotePath), note) },
+      ],
       details: {
         profile: name,
         path: remotePath,

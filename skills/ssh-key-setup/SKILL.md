@@ -9,7 +9,22 @@ allowed-tools: ssh_setup, ssh_status, ssh_keygen, ssh_authorize, ssh_exec, ssh_d
 A password in a config file is a password on disk, and typing one into every
 session is friction. A key fixes both. The whole switch is one tool call.
 
-## The normal path
+## It usually happens by itself
+
+A profile configured with only a password upgrades itself on first use: the
+first tool that connects installs a key, verifies it, and **removes the
+password from the config**. Nothing needs to be called for this, and the tool
+output reports it. Say so when relaying that output - the user should know
+their password is no longer stored and where the key went.
+
+If the upgrade failed, the note explains why and the password is still in
+place. That is worth surfacing rather than glossing over: it means the host
+refused key authentication, and the password is still on disk.
+
+`autoKey: false` on `ssh_setup` turns the automatic switch off for hosts where
+it is not wanted.
+
+## Doing it by hand
 
 1. `ssh_setup` with host, user and the password.
 2. `ssh_authorize` on that profile.

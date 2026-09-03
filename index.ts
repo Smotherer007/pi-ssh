@@ -15,6 +15,7 @@
  *   - ssh_keygen: Create an ed25519 key pair in process
  *   - ssh_authorize: Install a key on a host and stop needing the password
  *   - ssh_doctor: Report what the environment can do and what needs fixing
+ *   - ssh_tunnel: Open, close and list port forwards, and store named ones
  *
  * Nothing here shells out: ssh2 is a pure JavaScript SSH implementation and
  * keys are generated with Node's own crypto, so Windows, macOS and Linux all
@@ -40,6 +41,8 @@ import { SshDownloadTool } from "./src/tools/ssh-download.ts";
 import { SshKeygenTool } from "./src/tools/ssh-keygen.ts";
 import { SshAuthorizeTool } from "./src/tools/ssh-authorize.ts";
 import { SshDoctorTool } from "./src/tools/ssh-doctor.ts";
+import { SshTunnelTool } from "./src/tools/ssh-tunnel.ts";
+import { stopAllTunnels } from "./src/tunnels.ts";
 
 export default function (pi: ExtensionAPI) {
   // Load saved hosts on startup
@@ -56,6 +59,13 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool(SshKeygenTool);
   pi.registerTool(SshAuthorizeTool);
   pi.registerTool(SshDoctorTool);
+  pi.registerTool(SshTunnelTool);
+
+  // A tunnel is the one thing here that outlives its tool call, so it must
+  // not outlive the session that opened it.
+  pi.on("session_shutdown", async () => {
+    await stopAllTunnels();
+  });
 
   // Run something on the active host without spelling out the tool call
   pi.registerCommand("ssh", {

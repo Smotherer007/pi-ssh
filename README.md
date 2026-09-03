@@ -31,7 +31,23 @@ ssh_exec:
   command: systemctl status nginx --no-pager
 ```
 
-After `ssh_authorize` the password is no longer needed. It stays in the profile as a fallback until you pass `removePassword: true`.
+The password is only used once. On the **first connection** the extension installs a key on the host and removes the password from the config — see below.
+
+## The password is not kept
+
+A password in a config file stays there for as long as the profile does. So the first time a password-only profile is actually used — the first `ssh_exec`, `ssh_list`, tunnel, anything that connects — the extension:
+
+1. generates an ed25519 key,
+2. installs its public key in the remote `~/.ssh/authorized_keys`,
+3. opens a second connection using **only** the key to prove it works,
+4. writes the key path into the profile and **deletes the stored password**,
+5. and then does what you actually asked for.
+
+The tool output says so when this happened, including the fingerprint and where the key was written.
+
+If the upgrade fails — a host with `PubkeyAuthentication no`, an unwritable home directory — the password is kept and the work continues, with the reason in the output. The upgrade is attempted, not enforced: a server that refuses keys would otherwise become unusable.
+
+To keep using a password, set `autoKey: false` in `ssh_setup`. `ssh_authorize` then remains available to do the switch by hand.
 
 ## Tools
 
@@ -47,6 +63,7 @@ After `ssh_authorize` the password is no longer needed. It stays in the profile 
 | `ssh_keygen` | Create an ed25519 key pair in process. |
 | `ssh_authorize` | Install a key on a host and stop needing the password. |
 | `ssh_doctor` | Report what this machine can do and what needs fixing. |
+| `ssh_tunnel` | Open, close and list port forwards, and store named ones in a profile. |
 
 ### Passwordless login
 
@@ -86,6 +103,120 @@ ssh_upload:   { localPath: ./dist/app.tar.gz, remotePath: /tmp/app.tar.gz }
 ```
 
 Missing local directories are created on download. Prefer these over `cat` through `ssh_exec`: SFTP handles binary content and does not push the file through the model.
+
+### Tunnels
+
+A tunnel is the one thing here that keeps running after its tool call returns — that is what a tunnel is for. It stays up until it is stopped, its time limit expires, or the pi session ends, at which point all of them are closed.
+
+There are two directions, and the difference is whose machine each side refers to:
+
+| Kind | Who listens | Who reaches the destination | OpenSSH equivalent |
+|------|-------------|-----------------------------|--------------------|
+| `local` | this machine, on `bind:listenPort` | the server, to `destHost:destPort` | `ssh -L` |
+| `remote` | the server, on `bind:listenPort` | this machine, to `destHost:destPort` | `ssh -R` |
+
+**Local** is the common case: reach a database, admin interface or internal service that only the server can see.
+
+```yaml
+ssh_tunnel:
+  action: start
+  name: db
+  kind: local
+  listenPort: 5432          # 0 picks a free port
+  destHost: db.internal     # resolved from the server
+  destPort: 5432
+  # durationSeconds: 3600   # close automatically after an hour
+```
+
+Then connect to `127.0.0.1:5432` on this machine as if the database were local.
+
+**Remote** goes the other way: make something running here reachable from the server.
+
+```yaml
+ssh_tunnel:
+  action: start
+  name: preview
+  kind: remote
+  listenPort: 8080          # the server listens on this
+  destHost: 127.0.0.1       # resolved from this machine
+  destPort: 3000
+```
+
+#### Named tunnels in the profile
+
+Rather than repeating ports, store a tunnel under a name and start it by that name later. Definitions live in the profile in `~/.pi/ssh-config.json`.
+
+```yaml
+ssh_tunnel:
+  action: define
+  name: db
+  kind: local
+  listenPort: 5432
+  destHost: db.internal
+  destPort: 5432
+  description: production database, read replica
+```
+
+```yaml
+ssh_tunnel: { action: start, name: db }     # everything else comes from the profile
+ssh_tunnel: { action: stop,  name: db }
+ssh_tunnel: { action: forget, name: db }    # remove the definition
+```
+
+The stored form is plain JSON, so it can be written by hand too:
+
+```json
+{
+  "profiles": {
+    "staging": {
+      "host": "staging.example.com",
+      "port": 22,
+      "user": "deploy",
+      "privateKeyPath": "/home/pat/.ssh/id_ed25519_pi_staging",
+      "tunnels": {
+        "db": {
+          "kind": "local",
+          "listenPort": 5432,
+          "bind": "127.0.0.1",
+          "destHost": "db.internal",
+          "destPort": 5432,
+          "description": "production database, read replica"
+        },
+        "preview": {
+          "kind": "remote",
+          "listenPort": 8080,
+          "destHost": "127.0.0.1",
+          "destPort": 3000
+        }
+      }
+    }
+  },
+  "activeProfile": "staging"
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `kind` | `local` or `remote`, per the table above. |
+| `listenPort` | Port the tunnel accepts connections on. `0` picks a free one. |
+| `bind` | Interface that port binds to. Defaults to `127.0.0.1`. |
+| `destHost` / `destPort` | Where traffic is delivered. |
+| `description` | Free text, shown in listings. |
+
+#### Seeing and stopping them
+
+```yaml
+ssh_tunnel: { action: list }        # running tunnels and stored definitions
+ssh_tunnel: { action: "stop-all" }
+```
+
+`ssh_status` also lists anything currently running, so a forgotten tunnel does not stay invisible.
+
+#### Binding to something other than loopback
+
+`bind` defaults to `127.0.0.1`, which means only this machine (or only the server, for a remote tunnel) can use the tunnel. Setting it to `0.0.0.0` publishes the forwarded service to the whole network — the tool output says so when you do. For a remote tunnel, binding anything but loopback additionally needs `GatewayPorts` enabled in the server's `sshd_config`; without it sshd silently binds loopback instead.
+
+Each tunnel owns its own SSH connection. Sharing one would be tidier on the wire, but a single dropped connection would take every tunnel down with it.
 
 ## Commands
 
@@ -139,7 +270,7 @@ npm test
 npm run test:coverage
 ```
 
-The suite runs end-to-end against a real OpenSSH server: it starts `sshd` on a loopback port with a host key generated by this package, then exercises the handshake, host key verification (including a simulated key change), exit codes, SFTP, and the full key bootstrap. Those tests skip themselves on machines without `sshd` rather than failing.
+The suite runs end-to-end against a real OpenSSH server: it starts `sshd` on a loopback port with a host key generated by this package, then exercises the handshake, host key verification (including a simulated key change), exit codes, SFTP, the full key bootstrap, and both tunnel directions with real traffic flowing through them. Those tests skip themselves on machines without `sshd` rather than failing.
 
 ## License
 

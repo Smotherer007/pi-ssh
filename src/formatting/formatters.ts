@@ -7,6 +7,8 @@
 
 import type {
   AuthorizeResult,
+  RunningTunnel,
+  TunnelDefinition,
   ExecResult,
   RemoteEntry,
   ServerIdentity,
@@ -130,4 +132,78 @@ export function formatAuthorizeResult(result: AuthorizeResult): string {
       : "Warning: the key was installed but a key-only login could not be verified. The password is still in the profile as a fallback.",
   ];
   return lines.join("\n");
+}
+
+/** One line describing where a forward starts and where it ends. */
+export function describeTunnel(definition: TunnelDefinition): string {
+  const bind = definition.bind ?? "127.0.0.1";
+  const listen = `${bind}:${definition.listenPort === 0 ? "(free port)" : definition.listenPort}`;
+  const dest = `${definition.destHost}:${definition.destPort}`;
+
+  return definition.kind === "local"
+    ? `local ${listen} -> ${dest} (reached from the server)`
+    : `remote ${listen} on the server -> ${dest} (reached from this machine)`;
+}
+
+export function formatTunnelStarted(
+  tunnel: RunningTunnel,
+  profile: SshProfile,
+): string {
+  const bind = tunnel.definition.bind ?? "127.0.0.1";
+  const lines = [
+    `Tunnel "${tunnel.name}" is up: ${describeTunnel(tunnel.definition)}`,
+    tunnel.definition.kind === "local"
+      ? `Connect to ${tunnel.listenAddress} on this machine.`
+      : `On ${profile.host}, connect to ${tunnel.listenAddress}.`,
+    "",
+    "It keeps running in the background until you stop it with ssh_tunnel action stop"
+      + (tunnel.expiresAt ? `, or automatically at ${tunnel.expiresAt.slice(11, 19)} UTC.` : ", or the pi session ends."),
+  ];
+
+  if (bind !== "127.0.0.1" && bind !== "localhost") {
+    lines.push(
+      "",
+      `Note: this binds ${bind}, not loopback, so anything that can reach that interface can use the tunnel.`,
+    );
+  }
+  return lines.join("\n");
+}
+
+export function formatTunnelList(
+  running: ReadonlyArray<RunningTunnel>,
+  defined: ReadonlyArray<{ profile: string; name: string; definition: TunnelDefinition }>,
+): string {
+  const sections: string[] = [];
+
+  if (running.length === 0) {
+    sections.push("No tunnels are running.");
+  } else {
+    sections.push(`Running tunnels (${running.length}):`);
+    for (const tunnel of running) {
+      sections.push(
+        `- ${tunnel.profile}/${tunnel.name}: ${describeTunnel(tunnel.definition)}`,
+        `  listening on ${tunnel.listenAddress}, ${tunnel.connections} connection(s) since ${tunnel.startedAt.slice(11, 19)} UTC`
+          + (tunnel.expiresAt ? `, closes at ${tunnel.expiresAt.slice(11, 19)} UTC` : ""),
+      );
+    }
+  }
+
+  if (defined.length > 0) {
+    const runningIds = new Set(running.map((tunnel) => `${tunnel.profile}:${tunnel.name}`));
+    sections.push("", `Defined in profiles (${defined.length}):`);
+    for (const entry of defined) {
+      const state = runningIds.has(`${entry.profile}:${entry.name}`) ? " [running]" : "";
+      const purpose = entry.definition.description ? ` -- ${entry.definition.description}` : "";
+      sections.push(
+        `- ${entry.profile}/${entry.name}${state}: ${describeTunnel(entry.definition)}${purpose}`,
+      );
+    }
+  } else if (running.length === 0) {
+    sections.push(
+      "",
+      "Define one with ssh_tunnel action define, so it can be started by name later.",
+    );
+  }
+
+  return sections.join("\n");
 }

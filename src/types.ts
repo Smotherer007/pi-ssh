@@ -25,6 +25,53 @@ export interface SshProfile {
    */
   readonly strictHostKey?: boolean;
   readonly connectTimeoutMs?: number;
+  /**
+   * Upgrade this profile to key authentication on first use, replacing the
+   * stored password. On by default; set to false to keep using the password.
+   */
+  readonly autoKey?: boolean;
+  /** Named port forwards that ssh_tunnel can start by name. */
+  readonly tunnels?: Record<string, TunnelDefinition>;
+}
+
+/** A tunnel that is currently running. */
+export interface RunningTunnel {
+  readonly id: string;
+  readonly profile: string;
+  readonly name: string;
+  readonly definition: TunnelDefinition;
+  /** Where it actually listens, which matters when listenPort was 0. */
+  readonly listenAddress: string;
+  readonly startedAt: string;
+  readonly connections: number;
+  /** Set when the tunnel closes itself after a fixed time. */
+  readonly expiresAt?: string;
+}
+
+/**
+ * A port forward, stored by name in a profile.
+ *
+ * The same shape describes both directions, and `kind` decides whose machine
+ * each side refers to:
+ *
+ *   local  (ssh -L): this machine listens on bind:listenPort, and the server
+ *                    opens the connection to destHost:destPort.
+ *   remote (ssh -R): the server listens on bind:listenPort, and this machine
+ *                    opens the connection to destHost:destPort.
+ */
+export interface TunnelDefinition {
+  readonly kind: "local" | "remote";
+  /** Port the tunnel accepts connections on. */
+  readonly listenPort: number;
+  /**
+   * Interface to bind that port to. Defaults to 127.0.0.1: binding to
+   * 0.0.0.0 publishes the forwarded service to the whole network.
+   */
+  readonly bind?: string;
+  /** Where traffic is delivered. */
+  readonly destHost: string;
+  readonly destPort: number;
+  readonly description?: string;
 }
 
 export interface SshProfiles {
@@ -95,6 +142,7 @@ export interface SetupParams {
   readonly privateKeyPath?: string;
   readonly passphrase?: string;
   readonly strictHostKey?: boolean;
+  readonly autoKey?: boolean;
 }
 
 // Errors
@@ -130,6 +178,13 @@ export class SshAuthError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "SshAuthError";
+  }
+}
+
+export class TunnelError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TunnelError";
   }
 }
 

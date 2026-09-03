@@ -69,15 +69,27 @@ describe("ssh_setup validation", () => {
     );
   });
 
-  it("nudges towards ssh_authorize when only a password is given", () => {
+  it("announces that a password-only profile will be upgraded to a key", () => {
     const result = SshSetupTool.execute(
       "1",
       { name: "pw", host: "h", user: "u", password: "p" },
       signal,
     );
-    assert.match(result.content[0].text, /ssh_authorize/);
+    assert.match(result.content[0].text, /a key will be installed/);
+    assert.match(result.content[0].text, /password removed from the config/);
     assert.strictEqual(result.details.hasPassword, true);
     assert.strictEqual(result.details.hasKey, false);
+  });
+
+  it("points at ssh_authorize instead when the upgrade is switched off", () => {
+    const result = SshSetupTool.execute(
+      "1",
+      { name: "pw-manual", host: "h", user: "u", password: "p", autoKey: false },
+      signal,
+    );
+    assert.match(result.content[0].text, /keep doing so/);
+    assert.match(result.content[0].text, /ssh_authorize/);
+    assert.strictEqual(config.getProfile("pw-manual")!.autoKey, false);
   });
 
   it("expands a tilde in the key path", () => {

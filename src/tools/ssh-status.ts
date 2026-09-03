@@ -3,9 +3,11 @@
  */
 
 import { Type } from "typebox";
-import { getActiveProfile, getProfiles, resolveProfile } from "../config.ts";
+import { getActiveProfile, getProfiles } from "../config.ts";
+import { resolveForConnection, withNote } from "./shared.ts";
 import { withConnection } from "../clients/ssh-client.ts";
-import { formatIdentity, formatProfileStatus } from "../formatting/formatters.ts";
+import { formatIdentity, formatProfileStatus, formatTunnelList } from "../formatting/formatters.ts";
+import { listTunnels } from "../tunnels.ts";
 
 export const SshStatusTool = {
   name: "ssh_status",
@@ -30,7 +32,13 @@ export const SshStatusTool = {
     signal: AbortSignal,
   ) {
     const profiles = getProfiles();
-    const overview = formatProfileStatus(profiles, getActiveProfile());
+    const running = listTunnels();
+    // A tunnel outlives the call that opened it, so status is where it has to
+    // become visible again.
+    const overview = [
+      formatProfileStatus(profiles, getActiveProfile()),
+      ...(running.length > 0 ? ["", formatTunnelList(running, [])] : []),
+    ].join("\n");
 
     if (Object.keys(profiles).length === 0 || !params.connect) {
       return {
@@ -43,7 +51,7 @@ export const SshStatusTool = {
       };
     }
 
-    const { name, profile } = resolveProfile(params.profile);
+    const { name, profile, note } = await resolveForConnection(params.profile, { signal });
     let connection: string;
     let reachable = false;
     try {
@@ -57,7 +65,9 @@ export const SshStatusTool = {
     }
 
     return {
-      content: [{ type: "text" as const, text: `${overview}\n\n${connection}` }],
+      content: [
+        { type: "text" as const, text: withNote(`${overview}\n\n${connection}`, note) },
+      ],
       details: {
         count: Object.keys(profiles).length,
         profiles: Object.keys(profiles),

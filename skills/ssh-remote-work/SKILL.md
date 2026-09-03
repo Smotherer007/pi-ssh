@@ -74,6 +74,21 @@ The error usually says which layer failed. Work from it rather than retrying:
 - Something about the local environment - run `ssh_doctor`, which reports what
   is missing and what to do about it.
 
+## Tunnels
+
+`ssh_tunnel` is the one tool here whose effect outlives the call: a forward
+keeps running until stopped, its time limit expires, or the session ends.
+
+- Start one only when something actually needs it, and tell the user it is
+  running and how to reach it.
+- `ssh_tunnel action list`, and `ssh_status`, show what is open. Check there
+  before starting another one with the same purpose.
+- Stop tunnels when the work that needed them is done rather than leaving them
+  open for the rest of the session.
+- `bind` defaults to loopback. Do not set it to `0.0.0.0` unless the user asked
+  for the service to be reachable from other machines, and say plainly what
+  that exposes when you do.
+
 ## What to report back
 
 Give the user the command's actual output and its exit code. When a command

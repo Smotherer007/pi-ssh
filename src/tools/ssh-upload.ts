@@ -3,7 +3,7 @@
  */
 
 import { Type } from "typebox";
-import { resolveProfile } from "../config.ts";
+import { resolveForConnection, withNote } from "./shared.ts";
 import { uploadFile, withConnection } from "../clients/ssh-client.ts";
 import { formatTransfer } from "../formatting/formatters.ts";
 
@@ -35,7 +35,10 @@ export const SshUploadTool = {
     },
     signal: AbortSignal,
   ) {
-    const { name, profile } = resolveProfile(params.profile);
+    const { name, profile, note } = await resolveForConnection(params.profile, {
+      acceptNewHostKey: params.acceptNewHostKey,
+      signal,
+    });
 
     const result = await withConnection(
       profile,
@@ -44,7 +47,7 @@ export const SshUploadTool = {
     );
 
     return {
-      content: [{ type: "text" as const, text: formatTransfer(result, "up") }],
+      content: [{ type: "text" as const, text: withNote(formatTransfer(result, "up"), note) }],
       details: { profile: name, ...result },
     };
   },

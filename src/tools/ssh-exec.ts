@@ -3,7 +3,7 @@
  */
 
 import { Type } from "typebox";
-import { resolveProfile } from "../config.ts";
+import { resolveForConnection, withNote } from "./shared.ts";
 import { execCommand, withConnection } from "../clients/ssh-client.ts";
 import { formatExecResult } from "../formatting/formatters.ts";
 
@@ -45,7 +45,10 @@ export const SshExecTool = {
   ) {
     if (!params.command?.trim()) throw new Error("command must not be empty.");
 
-    const { name, profile } = resolveProfile(params.profile);
+    const { name, profile, note } = await resolveForConnection(params.profile, {
+      acceptNewHostKey: params.acceptNewHostKey,
+      signal,
+    });
     const timeoutMs = Math.min(Math.max(params.timeoutSeconds ?? 120, 1), 3600) * 1000;
 
     const result = await withConnection(
@@ -60,7 +63,7 @@ export const SshExecTool = {
     );
 
     return {
-      content: [{ type: "text" as const, text: formatExecResult(result) }],
+      content: [{ type: "text" as const, text: withNote(formatExecResult(result), note) }],
       details: {
         profile: name,
         host: profile.host,

@@ -35,6 +35,13 @@ export const SshSetupTool = {
     passphrase: Type.Optional(
       Type.String({ description: "Passphrase for that private key, if it has one." }),
     ),
+    autoKey: Type.Optional(
+      Type.Boolean({
+        description:
+          "On the first connection, install an SSH key on the host and replace the stored password with it. Default true. Set false to keep using the password.",
+        default: true,
+      }),
+    ),
     strictHostKey: Type.Optional(
       Type.Boolean({
         description:
@@ -67,14 +74,18 @@ export const SshSetupTool = {
         ? { privateKeyPath: expandPath(params.privateKeyPath) }
         : {}),
       ...(params.passphrase ? { passphrase: params.passphrase } : {}),
+      ...(params.autoKey === false ? { autoKey: false } : {}),
       ...(params.strictHostKey === false ? { strictHostKey: false } : {}),
     };
 
     saveProfile(params.name, profile);
 
-    const advice = profile.password && !profile.privateKeyPath
-      ? "\n\nThis profile logs in with a password. Run ssh_authorize to generate a key, install it on the host, and stop needing the password."
-      : "";
+    const advice =
+      profile.password && !profile.privateKeyPath
+        ? params.autoKey === false
+          ? "\n\nThis profile logs in with a password and will keep doing so. Run ssh_authorize to switch to a key."
+          : "\n\nThis profile logs in with a password. On the first connection a key will be installed on the host and the password removed from the config; pass autoKey: false to prevent that."
+        : "";
 
     return {
       content: [
