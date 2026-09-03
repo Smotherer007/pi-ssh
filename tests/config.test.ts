@@ -121,7 +121,10 @@ describe("config", () => {
     it("writes the file owner-only, because it holds passwords", async () => {
       const mod = await freshConfig();
       mod.saveProfile("staging", staging);
-      assert.strictEqual(fs.statSync(configFile).mode & 0o777, 0o600);
+      // Windows does not enforce these modes; ssh_doctor reports that instead.
+      if (process.platform !== "win32") {
+        assert.strictEqual(fs.statSync(configFile).mode & 0o777, 0o600);
+      }
     });
 
     it("round-trips through loadConfig", async () => {
@@ -156,7 +159,10 @@ describe("config", () => {
       fs.chmodSync(configFile, 0o644);
       const mod = await freshConfig();
       mod.loadConfig();
-      assert.strictEqual(fs.statSync(configFile).mode & 0o777, 0o600);
+      // Windows does not enforce these modes; ssh_doctor reports that instead.
+      if (process.platform !== "win32") {
+        assert.strictEqual(fs.statSync(configFile).mode & 0o777, 0o600);
+      }
     });
 
     it("survives a corrupt file", async () => {

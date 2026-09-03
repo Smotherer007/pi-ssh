@@ -49,6 +49,11 @@ run `ssh_doctor` and show them the report rather than guessing.
 The keys produced are ordinary OpenSSH ed25519 keys, so `ssh -i` and any other
 SSH client can use the same file.
 
+On Windows there is one caveat worth passing on: the owner-only file modes
+this extension sets are not enforced there, because access is governed by
+ACLs. That makes replacing a stored password with a key more valuable, not
+less. `ssh_doctor` says so on that platform.
+
 ## Things worth getting right
 
 - **Never overwrite an existing key.** Every host that already trusts it would

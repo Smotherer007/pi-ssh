@@ -29,6 +29,7 @@ interface TunnelHandle {
   listenAddress: string;
   connections: number;
   expiresAt?: Date;
+  stopped: boolean;
   stop(): Promise<void>;
 }
 
@@ -253,6 +254,7 @@ export async function startTunnel(options: StartTunnelOptions): Promise<RunningT
     startedAt: new Date(),
     listenAddress: "",
     connections: 0,
+    stopped: false,
     stop: async () => {
       connection.client.end();
       running.delete(id);
@@ -269,22 +271,35 @@ export async function startTunnel(options: StartTunnelOptions): Promise<RunningT
     throw err;
   }
 
-  // A dropped SSH connection means the tunnel is dead; do not leave a stale
-  // entry claiming otherwise.
+  // A dropped SSH connection means the tunnel is dead. Removing it from the
+  // registry is not enough: the local listener would keep accepting
+  // connections that can no longer go anywhere, so it has to be torn down
+  // too.
   connection.client.on("close", () => {
-    running.delete(id);
+    void teardown(handle);
   });
 
   if (options.durationSeconds && options.durationSeconds > 0) {
     handle.expiresAt = new Date(Date.now() + options.durationSeconds * 1000);
     const timer = setTimeout(() => {
-      void handle.stop();
+      void teardown(handle);
     }, options.durationSeconds * 1000);
     timer.unref?.();
   }
 
   running.set(id, handle);
   return describe(handle);
+}
+
+/** Stop a tunnel once, whether the caller asked or the connection died. */
+async function teardown(handle: TunnelHandle): Promise<void> {
+  if (handle.stopped) return;
+  handle.stopped = true;
+  try {
+    await handle.stop();
+  } finally {
+    running.delete(handle.id);
+  }
 }
 
 function describe(handle: TunnelHandle): RunningTunnel {
@@ -307,15 +322,14 @@ export function listTunnels(): RunningTunnel[] {
 export async function stopTunnel(profileName: string, name: string): Promise<boolean> {
   const handle = running.get(tunnelId(profileName, name));
   if (!handle) return false;
-  await handle.stop();
-  running.delete(handle.id);
+  await teardown(handle);
   return true;
 }
 
 /** Close everything. Called when the pi session ends. */
 export async function stopAllTunnels(): Promise<number> {
   const handles = [...running.values()];
-  await Promise.all(handles.map((handle) => handle.stop().catch(() => undefined)));
+  await Promise.all(handles.map((handle) => teardown(handle).catch(() => undefined)));
   running.clear();
   return handles.length;
 }

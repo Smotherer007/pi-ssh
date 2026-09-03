@@ -40,6 +40,17 @@ import {
 import { expandPath } from "../config.ts";
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 20_000;
+/**
+ * SSH-level keepalives.
+ *
+ * ssh2 sends none by default. A connection that carries a tunnel can sit idle
+ * for a long time, and anything doing NAT or stateful filtering in between
+ * will eventually drop an idle flow without telling either end -- the tunnel
+ * then looks alive and silently is not. Four unanswered probes at 15s means a
+ * dead connection is noticed within about a minute and closed properly.
+ */
+const KEEPALIVE_INTERVAL_MS = 15_000;
+const KEEPALIVE_COUNT_MAX = 4;
 const DEFAULT_EXEC_TIMEOUT_MS = 120_000;
 /** Enough to be useful, small enough not to swamp a context window. */
 const MAX_OUTPUT_CHARS = 200_000;
@@ -71,7 +82,7 @@ function readPrivateKey(profile: SshProfile): Buffer | null {
 }
 
 /** The authentication methods to offer, in the order they should be tried. */
-function buildAuthMethods(
+export function buildAuthMethods(
   profile: SshProfile,
   only: ConnectOptions["only"],
 ): Array<{ type: string; label: string; key?: Buffer; passphrase?: string; password?: string }> {
@@ -143,6 +154,8 @@ export function connect(
       port: profile.port,
       username: profile.user,
       readyTimeout: profile.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
+      keepaliveInterval: KEEPALIVE_INTERVAL_MS,
+      keepaliveCountMax: KEEPALIVE_COUNT_MAX,
 
       hostVerifier: (key: Buffer, verify: (ok: boolean) => void) => {
         const check = checkHostKey(profile.host, profile.port, key, knownHostsFile);

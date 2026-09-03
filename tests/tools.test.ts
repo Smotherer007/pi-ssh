@@ -144,7 +144,9 @@ describe("ssh_keygen", () => {
 
     assert.ok(fs.existsSync(target));
     assert.ok(fs.existsSync(`${target}.pub`));
-    assert.strictEqual(fs.statSync(target).mode & 0o777, 0o600);
+    if (process.platform !== "win32") {
+      assert.strictEqual(fs.statSync(target).mode & 0o777, 0o600);
+    }
     assert.match(result.details.fingerprint, /^SHA256:/);
     assert.match(result.details.publicKey, /^ssh-ed25519 .* unit test$/);
   });

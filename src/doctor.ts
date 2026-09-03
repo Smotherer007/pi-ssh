@@ -25,6 +25,33 @@ export interface Check {
   readonly remedy?: string;
 }
 
+/**
+ * Whether file permissions mean anything on this platform.
+ *
+ * The config file can hold a password and the private keys are secrets, so
+ * they are written 0600. On Windows chmod only toggles the read-only bit and
+ * access is governed by ACLs instead, so those modes are not enforced. Saying
+ * nothing would be the wrong kind of quiet: the situation there is weaker,
+ * not stronger.
+ */
+export function describePermissionSupport(platform: string): Check {
+  if (platform !== "win32") {
+    return {
+      name: "File permissions",
+      status: "ok",
+      detail: "secrets are written owner-only (0600) and that is enforced",
+    };
+  }
+  return {
+    name: "File permissions",
+    status: "note",
+    detail:
+      "Windows ignores the owner-only modes this extension sets; access is governed by ACLs instead",
+    remedy:
+      "~/.pi/ssh-config.json can hold a password and ~/.ssh holds private keys. Make sure your user profile directory is not shared, or let ssh_authorize replace the password with a key.",
+  };
+}
+
 function checkNodeVersion(): Check {
   const major = Number.parseInt(process.versions.node.split(".")[0], 10);
   return major >= 20
@@ -189,6 +216,7 @@ export function runChecks(): Check[] {
     checkSsh2(),
     checkKeyGeneration(),
     checkOpenSshClient(),
+    describePermissionSupport(process.platform),
     checkSshDirectory(),
     checkKnownHosts(),
     checkConfigDirectory(),

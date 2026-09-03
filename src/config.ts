@@ -18,7 +18,7 @@ let profiles: Record<string, SshProfile> = {};
 let activeProfile: string | null = null;
 
 function configPath(): string {
-  const home = process.env.HOME || process.env.USERPROFILE || "~";
+  const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
   return path.join(home, ".pi", "ssh-config.json");
 }
 

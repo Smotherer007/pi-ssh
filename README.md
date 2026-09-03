@@ -216,7 +216,20 @@ ssh_tunnel: { action: "stop-all" }
 
 `bind` defaults to `127.0.0.1`, which means only this machine (or only the server, for a remote tunnel) can use the tunnel. Setting it to `0.0.0.0` publishes the forwarded service to the whole network — the tool output says so when you do. For a remote tunnel, binding anything but loopback additionally needs `GatewayPorts` enabled in the server's `sshd_config`; without it sshd silently binds loopback instead.
 
+#### How long it stays up
+
+A tunnel holds its own SSH connection open and keeps listening after the tool call returns. It ends when:
+
+- you stop it (`action: stop` or `stop-all`),
+- its `durationSeconds` expires,
+- the underlying SSH connection drops, or
+- the pi session ends.
+
 Each tunnel owns its own SSH connection. Sharing one would be tidier on the wire, but a single dropped connection would take every tunnel down with it.
+
+SSH-level keepalives are enabled (every 15s, four unanswered probes before giving up). ssh2 sends none by default, and without them an idle tunnel behind a NAT or a stateful firewall keeps looking alive long after the path has been dropped. With them, a dead connection is noticed within about a minute, the local listener is closed, and the tunnel disappears from `ssh_tunnel list` — rather than accepting connections that silently go nowhere.
+
+There is no automatic reconnect: a tunnel that dies stays dead and has to be started again.
 
 ## Commands
 
@@ -261,6 +274,14 @@ Profiles live in `~/.pi/ssh-config.json`, written atomically with mode `0600` be
 ```
 
 Every tool also takes a one-off `profile` parameter, so several hosts can be used in one session without switching.
+
+## Platform support
+
+Windows, macOS and Linux behave the same. Nothing in this package spawns a process — SSH comes from [ssh2](https://github.com/mscdex/ssh2) in pure JavaScript, keys are generated with Node's crypto, and there are no POSIX-only paths. A test asserts all three, so a change that introduces one fails the suite rather than only failing on someone else's machine.
+
+One difference is real and worth knowing: **file permissions are not enforced on Windows.** The config file and private keys are written with mode `0600`, but Windows governs access through ACLs and `chmod` only toggles the read-only bit. `ssh_doctor` reports this as a note on Windows rather than staying quiet about it. The practical answer is the same as everywhere: let the first connection replace the stored password with a key, so the file stops holding a secret at all.
+
+The end-to-end tests need an `sshd` to run against and skip themselves where there is none, which includes Windows.
 
 ## Development
 
