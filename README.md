@@ -203,6 +203,21 @@ The stored form is plain JSON, so it can be written by hand too:
 | `destHost` / `destPort` | Where traffic is delivered. |
 | `description` | Free text, shown in listings. |
 
+#### Always visible while it is open
+
+An open tunnel is shown in pi itself, not only when you ask for it. Each one appears in the widget above the editor:
+
+```
+SSH tunnel staging/db: 127.0.0.1:5432 -> db.internal:5432
+SSH tunnel staging/preview: 127.0.0.1:8080 <- 127.0.0.1:3000 until 11:30Z
+```
+
+and the footer carries a short summary (`SSH tunnel db on 127.0.0.1:5432`, or `2 SSH tunnels open`). Both are cleared the moment the last tunnel closes, so nothing claims a forward is open when it is not.
+
+This is deliberate rather than decorative: a forgotten tunnel is a port on your machine reaching into someone else's network, and a listing that has scrolled out of view does not remind you of it.
+
+In modes without an interface — `rpc`, `json`, `print` — nothing is drawn and nothing fails.
+
 #### Seeing and stopping them
 
 ```yaml
@@ -274,6 +289,17 @@ Profiles live in `~/.pi/ssh-config.json`, written atomically with mode `0600` be
 ```
 
 Every tool also takes a one-off `profile` parameter, so several hosts can be used in one session without switching.
+
+### Editing the file by hand
+
+The file is safe to edit while pi is running, and safe to share with a second pi session:
+
+- **Writes merge.** Every write re-reads the file first and applies only its own change, so a host you added by hand — or one another session added — is not erased by an unrelated write from pi.
+- **Outside edits are picked up** without restarting pi; the next tool call sees them.
+- **Unknown keys survive.** A top-level key this version does not understand, or an extra field inside a profile such as a comment, is written back untouched.
+- **Nothing is rewritten needlessly.** A save that would not change the contents does not touch the file, so mtimes stay put and file watchers stay quiet.
+
+Writes are atomic: the new contents go to a private temporary file that is renamed into place, so an interrupted write cannot truncate the config.
 
 ## Platform support
 

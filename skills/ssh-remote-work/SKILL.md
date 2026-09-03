@@ -81,8 +81,11 @@ keeps running until stopped, its time limit expires, or the session ends.
 
 - Start one only when something actually needs it, and tell the user it is
   running and how to reach it.
-- `ssh_tunnel action list`, and `ssh_status`, show what is open. Check there
-  before starting another one with the same purpose.
+- Open tunnels are shown in pi's widget above the editor and summarised in the
+  footer for as long as they last, so the user can see them without asking.
+  `ssh_tunnel action list` and `ssh_status` give the same information on
+  demand; check one of them before starting another tunnel for the same
+  purpose.
 - Stop tunnels when the work that needed them is done rather than leaving them
   open for the rest of the session.
 - `bind` defaults to loopback. Do not set it to `0.0.0.0` unless the user asked

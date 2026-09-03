@@ -42,7 +42,8 @@ import { SshKeygenTool } from "./src/tools/ssh-keygen.ts";
 import { SshAuthorizeTool } from "./src/tools/ssh-authorize.ts";
 import { SshDoctorTool } from "./src/tools/ssh-doctor.ts";
 import { SshTunnelTool } from "./src/tools/ssh-tunnel.ts";
-import { stopAllTunnels } from "./src/tunnels.ts";
+import { listTunnels, onTunnelsChanged, stopAllTunnels } from "./src/tunnels.ts";
+import { createTunnelIndicator } from "./src/ui.ts";
 
 export default function (pi: ExtensionAPI) {
   // Load saved hosts on startup
@@ -66,6 +67,16 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_shutdown", async () => {
     await stopAllTunnels();
   });
+
+  // ...and while it is open it stays on screen. The context carrying the
+  // interface only arrives with an event, so the indicator is wired up on the
+  // first one and refreshed whenever a tunnel comes or goes.
+  let showTunnels: ((tunnels: ReturnType<typeof listTunnels>) => void) | null = null;
+  pi.on("session_start", async (_event: unknown, ctx: unknown) => {
+    showTunnels = createTunnelIndicator(ctx as never);
+    showTunnels(listTunnels());
+  });
+  onTunnelsChanged((tunnels) => showTunnels?.(tunnels));
 
   // Run something on the active host without spelling out the tool call
   pi.registerCommand("ssh", {

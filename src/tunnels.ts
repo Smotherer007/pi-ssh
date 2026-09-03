@@ -35,6 +35,32 @@ interface TunnelHandle {
 
 const running = new Map<string, TunnelHandle>();
 
+/**
+ * Anything that wants to know when the set of tunnels changes.
+ *
+ * A tunnel is the one thing here that keeps running unattended, so something
+ * has to be able to keep showing it. The registry stays ignorant of what that
+ * something is.
+ */
+type ChangeListener = (tunnels: RunningTunnel[]) => void;
+const listeners = new Set<ChangeListener>();
+
+export function onTunnelsChanged(listener: ChangeListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function notifyChanged(): void {
+  const snapshot = listTunnels();
+  for (const listener of listeners) {
+    try {
+      listener(snapshot);
+    } catch {
+      // A broken display must never take a tunnel down with it.
+    }
+  }
+}
+
 function tunnelId(profile: string, name: string): string {
   return `${profile}:${name}`;
 }
@@ -288,6 +314,7 @@ export async function startTunnel(options: StartTunnelOptions): Promise<RunningT
   }
 
   running.set(id, handle);
+  notifyChanged();
   return describe(handle);
 }
 
@@ -299,6 +326,7 @@ async function teardown(handle: TunnelHandle): Promise<void> {
     await handle.stop();
   } finally {
     running.delete(handle.id);
+    notifyChanged();
   }
 }
 
@@ -331,10 +359,16 @@ export async function stopAllTunnels(): Promise<number> {
   const handles = [...running.values()];
   await Promise.all(handles.map((handle) => teardown(handle).catch(() => undefined)));
   running.clear();
+  notifyChanged();
   return handles.length;
 }
 
 /** @internal for tests */
 export function _runningCount(): number {
   return running.size;
+}
+
+/** @internal for tests */
+export function _clearListeners(): void {
+  listeners.clear();
 }
